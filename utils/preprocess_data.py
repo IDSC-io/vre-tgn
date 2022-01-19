@@ -59,7 +59,8 @@ def reindex(df, bipartite=True):
 
 def run(data_name, bipartite=True):
   Path("data/").mkdir(parents=True, exist_ok=True)
-  PATH = './data/{}.csv'.format(data_name)
+  PATH = './data/{}_node_interactions.csv'.format(data_name)
+  PATH_NODE_FEAT = './data/{}_node_features.csv'.format(data_name)
   OUT_DF = './data/ml_{}.csv'.format(data_name)
   OUT_FEAT = './data/ml_{}.npy'.format(data_name)
   OUT_NODE_FEAT = './data/ml_{}_node.npy'.format(data_name)
@@ -70,15 +71,21 @@ def run(data_name, bipartite=True):
   empty = np.zeros(feat.shape[1])[np.newaxis, :]
   feat = np.vstack([empty, feat])
 
+  # %%
+
   max_idx = max(new_df.u.max(), new_df.i.max())
-  rand_feat = np.zeros((max_idx + 1, 172))
+  node_feat = np.zeros((max_idx + 1, 172))
+  #node_feat = pd.read_csv(PATH_NODE_FEAT).to_numpy()
+  # TODO: Enable node features
+
+  # %%
 
   new_df.to_csv(OUT_DF)
   np.save(OUT_FEAT, feat)
-  np.save(OUT_NODE_FEAT, rand_feat)
+  np.save(OUT_NODE_FEAT, node_feat)
 
 parser = argparse.ArgumentParser('Interface for TGN data preprocessing')
-parser.add_argument('--data', type=str, help='Dataset name (eg. wikipedia or reddit)',
+parser.add_argument('--data', type=str, help='Dataset name (eg. wikipedia or reddit or your own)',
                     default='wikipedia')
 parser.add_argument('--bipartite', action='store_true', help='Whether the graph is bipartite')
 
