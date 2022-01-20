@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import pickle
 from pathlib import Path
+from tqdm import tqdm
 
 from evaluation.evaluation import eval_edge_prediction
 from model.tgn import TGN
@@ -132,14 +133,14 @@ nn_test_rand_sampler = RandEdgeSampler(new_node_test_data.sources,
                                        seed=3)
 
 # Set device
-device_string = 'cuda:{}'.format(GPU) if torch.cuda.is_available() else 'cpu'
+device_string = 'cuda:{}'.format(GPU) if torch.cuda.is_available() and GPU >= 0 else 'cpu'
 device = torch.device(device_string)
 
 # Compute time statistics
 mean_time_shift_src, std_time_shift_src, mean_time_shift_dst, std_time_shift_dst = \
   compute_time_statistics(full_data.sources, full_data.destinations, full_data.timestamps)
 
-for i in range(args.n_runs):
+for i in tqdm(range(args.n_runs), desc="runs", position=0):
   results_path = "results/{}_{}.pkl".format(args.prefix, i) if i > 0 else "results/{}.pkl".format(args.prefix)
   Path("results/").mkdir(parents=True, exist_ok=True)
 
@@ -178,7 +179,7 @@ for i in range(args.n_runs):
   train_losses = []
 
   early_stopper = EarlyStopMonitor(max_round=args.patience)
-  for epoch in range(NUM_EPOCH):
+  for epoch in tqdm(range(NUM_EPOCH), desc="epochs", position=1):
     start_epoch = time.time()
     ### Training
 
@@ -191,7 +192,7 @@ for i in range(args.n_runs):
     m_loss = []
 
     logger.info('start {} epoch'.format(epoch))
-    for k in range(0, num_batch, args.backprop_every):
+    for k in tqdm(range(0, num_batch, args.backprop_every),desc="batches", position=2):
       loss = 0
       optimizer.zero_grad()
 
