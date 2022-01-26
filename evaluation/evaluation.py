@@ -2,7 +2,9 @@ import math
 
 import numpy as np
 import torch
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import auc, average_precision_score, roc_auc_score, roc_curve, precision_recall_curve
+import matplotlib.pyplot as plt
+import datetime
 
 
 def eval_edge_prediction(model, negative_edge_sampler, data, n_neighbors, batch_size=200):
@@ -73,4 +75,42 @@ def eval_node_classification(tgn, decoder, data, edge_idxs, batch_size, n_neighb
       pred_prob[s_idx: e_idx] = pred_prob_batch.cpu().numpy()
 
   auc_roc = roc_auc_score(data.labels, pred_prob)
+
+  fpr, tpr, _ = roc_curve(data.labels, pred_prob)
+  plt.figure()
+  lw = 2
+  plt.plot(
+      fpr[2],
+      tpr[2],
+      color="darkorange",
+      lw=lw,
+      label="ROC curve (area = %0.2f)" % auc_roc,
+  )
+  plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
+  plt.xlim([0.0, 1.0])
+  plt.ylim([0.0, 1.05])
+  plt.xlabel("False Positive Rate")
+  plt.ylabel("True Positive Rate")
+  plt.title("Receiver operating characteristic")
+  plt.legend(loc="lower right")
+  plt.savefig(f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_roc_curve.png")
+  plt.show()
+
+  # predict class values
+  lr_precision, lr_recall, _ = precision_recall_curve(data.labels, pred_prob)
+
+  # plot the precision-recall curves
+  no_skill = len(data.labels[data.labels==1]) / len(data.labels)
+  plt.figure()
+  plt.plot([0, 1], [no_skill, no_skill], linestyle='--', label='No Skill')
+  plt.plot(lr_recall, lr_precision, marker='.', label='TGN')
+  # axis labels
+  plt.xlabel('Recall')
+  plt.ylabel('Precision')
+  # show the legend
+  plt.legend()
+  # show the plot
+  plt.savefig(f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_prec_rec_curve.png")
+  plt.show()
+
   return auc_roc
