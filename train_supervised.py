@@ -9,6 +9,7 @@ from pathlib import Path
 
 import torch
 import numpy as np
+from tqdm import tqdm
 
 from model.tgn import TGN
 from utils.utils import EarlyStopMonitor, get_neighbor_finder, MLP
@@ -123,7 +124,7 @@ max_idx = max(full_data.unique_nodes)
 train_ngh_finder = get_neighbor_finder(train_data, uniform=UNIFORM, max_node_idx=max_idx)
 
 # Set device
-device_string = 'cuda:{}'.format(GPU) if torch.cuda.is_available() else 'cpu'
+device_string = 'cuda:{}'.format(GPU) if torch.cuda.is_available() and GPU >= 0  else 'cpu'
 device = torch.device(device_string)
 
 # Compute time statistics
@@ -175,7 +176,7 @@ for i in range(args.n_runs):
   train_losses = []
 
   early_stopper = EarlyStopMonitor(max_round=args.patience)
-  for epoch in range(args.n_epoch):
+  for epoch in tqdm(range(args.n_epoch), position=0):
     start_epoch = time.time()
     
     # Initialize memory of the model at each epoch
@@ -186,7 +187,7 @@ for i in range(args.n_runs):
     decoder = decoder.train()
     loss = 0
     
-    for k in range(num_batch):
+    for k in tqdm(range(num_batch), position=0):
       s_idx = k * BATCH_SIZE
       e_idx = min(num_instance, s_idx + BATCH_SIZE)
 

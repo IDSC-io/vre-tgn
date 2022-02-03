@@ -80,8 +80,8 @@ def eval_node_classification(tgn, decoder, data, edge_idxs, batch_size, n_neighb
   plt.figure()
   lw = 2
   plt.plot(
-      fpr[2],
-      tpr[2],
+      fpr,
+      tpr,
       color="darkorange",
       lw=lw,
       label="ROC curve (area = %0.2f)" % auc_roc,
