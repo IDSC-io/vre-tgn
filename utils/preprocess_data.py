@@ -74,9 +74,11 @@ def run(data_name, bipartite=True):
   # %%
 
   max_idx = max(new_df.u.max(), new_df.i.max())
-  node_feat = np.zeros((max_idx + 1, 172))
-  #node_feat = pd.read_csv(PATH_NODE_FEAT).to_numpy()
-  # TODO: Enable node features
+  try:
+    node_feat = pd.read_csv(PATH_NODE_FEAT).to_numpy()
+    node_feat = np.vstack([node_feat, np.zeros([max_idx + 1 - node_feat.shape[0], node_feat.shape[1]])])
+  except Exception as e:
+    node_feat = np.zeros((max_idx + 1, 172))
 
   # %%
 
