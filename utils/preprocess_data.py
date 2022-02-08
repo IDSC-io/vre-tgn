@@ -84,7 +84,7 @@ def run(data_name, bipartite=True):
     node_feat = pd.read_csv(PATH_NODE_FEAT)
     node_feat = pd.DataFrame(MinMaxScaler().fit_transform(node_feat.values), columns=node_feat.columns, index=node_feat.index).to_numpy()
     # the indices of the entities start at 1, so we need one more element for the non-existent 0 element (i.e. ml_reddit_df["u"].min() == 1)
-    node_feat = np.vstack([node_feat, np.zeros([max_idx + 1 - node_feat.shape[0], node_feat.shape[1]])])
+    node_feat = np.vstack([np.zeros([max_idx + 1 - node_feat.shape[0], node_feat.shape[1]]), node_feat])
     logger.info("Loading node features succeeded.")
   except Exception as e:
     logger.info("Loading node features failed, loading zero matrix instead...")
