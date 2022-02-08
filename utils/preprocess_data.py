@@ -3,9 +3,13 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import argparse
+import logging
+import time
+from sklearn.preprocessing import MinMaxScaler
 
 
 def preprocess(data_name):
+  logger.info("Loading interaction and label data...")
   u_list, i_list, ts_list, label_list = [], [], [], []
   feat_l = []
   idx_list = []
@@ -29,6 +33,7 @@ def preprocess(data_name):
       idx_list.append(idx)
 
       feat_l.append(feat)
+  logger.info("Loading interation and label data succeeded.")
   return pd.DataFrame({'u': u_list,
                        'i': i_list,
                        'ts': ts_list,
@@ -75,9 +80,16 @@ def run(data_name, bipartite=True):
 
   max_idx = max(new_df.u.max(), new_df.i.max())
   try:
-    node_feat = pd.read_csv(PATH_NODE_FEAT).to_numpy()
+    logger.info("Trying to load graph node features...")
+    node_feat = pd.read_csv(PATH_NODE_FEAT)
+    node_feat = pd.DataFrame(MinMaxScaler().fit_transform(node_feat.values), columns=node_feat.columns, index=node_feat.index).to_numpy()
+    # the indices of the entities start at 1, so we need one more element for the non-existent 0 element (i.e. ml_reddit_df["u"].min() == 1)
     node_feat = np.vstack([node_feat, np.zeros([max_idx + 1 - node_feat.shape[0], node_feat.shape[1]])])
+    logger.info("Loading node features succeeded.")
   except Exception as e:
+    logger.info("Loading node features failed, loading zero matrix instead...")
+    logger.info(str(e))
+
     node_feat = np.zeros((max_idx + 1, 172))
 
   # %%
@@ -86,11 +98,28 @@ def run(data_name, bipartite=True):
   np.save(OUT_FEAT, feat)
   np.save(OUT_NODE_FEAT, node_feat)
 
-parser = argparse.ArgumentParser('Interface for TGN data preprocessing')
-parser.add_argument('--data', type=str, help='Dataset name (eg. wikipedia or reddit or your own)',
-                    default='wikipedia')
-parser.add_argument('--bipartite', action='store_true', help='Whether the graph is bipartite')
+if __name__ == "__main__":
+  parser = argparse.ArgumentParser('Interface for TGN data preprocessing')
+  parser.add_argument('--data', type=str, help='Dataset name (eg. wikipedia or reddit or your own)',
+                      default='wikipedia')
+  parser.add_argument('--bipartite', action='store_true', help='Whether the graph is bipartite')
 
-args = parser.parse_args()
+  args = parser.parse_args()
 
-run(args.data, bipartite=args.bipartite)
+  logging.basicConfig(level=logging.INFO)
+  logger = logging.getLogger()
+  logger.setLevel(logging.DEBUG)
+  fh = logging.FileHandler('log/{}.log'.format(str(time.time())))
+  fh.setLevel(logging.DEBUG)
+  ch = logging.StreamHandler()
+  ch.setLevel(logging.WARN)
+  formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+  fh.setFormatter(formatter)
+  ch.setFormatter(formatter)
+  logger.addHandler(fh)
+  logger.addHandler(ch)
+  logger.info(args)
+
+  logger.info(f"Preprocessing {args.data}...")
+  run(args.data, bipartite=args.bipartite)
+  logger.info(f"Preprocessing {args.data} data succeeded.")
