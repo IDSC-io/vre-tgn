@@ -5,6 +5,7 @@ import torch
 from sklearn.metrics import auc, average_precision_score, roc_auc_score, roc_curve, precision_recall_curve
 import matplotlib.pyplot as plt
 import datetime
+import pickle
 
 
 def eval_edge_prediction(model, negative_edge_sampler, data, n_neighbors, batch_size=200):
@@ -110,7 +111,13 @@ def eval_node_classification(tgn, decoder, data, edge_idxs, batch_size, n_neighb
   # show the legend
   plt.legend()
   # show the plot
-  plt.savefig(f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_prec_rec_curve.png")
+  timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+  plt.savefig(f"{timestamp}_prec_rec_curve.png")
   plt.show()
+
+  roc_auc_data = [fpr, tpr, auc_roc]
+
+  with open(f"{timestamp}_tgn_roc_auc.pickle", 'wb') as fh:
+    pickle.dump(roc_auc_data, fh, pickle.HIGHEST_PROTOCOL)
 
   return auc_roc
