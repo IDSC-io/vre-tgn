@@ -6,6 +6,7 @@ from sklearn.metrics import auc, average_precision_score, roc_auc_score, roc_cur
 import matplotlib.pyplot as plt
 import datetime
 import pickle
+from tqdm import tqdm
 
 
 def eval_edge_prediction(model, negative_edge_sampler, data, n_neighbors, batch_size=200):
@@ -25,7 +26,7 @@ def eval_edge_prediction(model, negative_edge_sampler, data, n_neighbors, batch_
     num_test_instance = len(data.sources)
     num_test_batch = math.ceil(num_test_instance / TEST_BATCH_SIZE)
 
-    for k in range(num_test_batch):
+    for k in tqdm(range(num_test_batch)):
       s_idx = k * TEST_BATCH_SIZE
       e_idx = min(num_test_instance, s_idx + TEST_BATCH_SIZE)
       sources_batch = data.sources[s_idx:e_idx]
@@ -57,7 +58,7 @@ def eval_node_classification(tgn, decoder, data, edge_idxs, batch_size, n_neighb
   with torch.no_grad():
     decoder.eval()
     tgn.eval()
-    for k in range(num_batch):
+    for k in tqdm(range(num_batch)):
       s_idx = k * batch_size
       e_idx = min(num_instance, s_idx + batch_size)
 
