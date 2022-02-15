@@ -1,4 +1,6 @@
 # %%
+# based on: https://colab.research.google.com/github/a-coders-guide-to-ai/lessons/blob/main/This%20is%20How%20to%20Improve%20an%20Imbalanced%20Dataset.ipynb#scrollTo=Q2EGSmykDEjk
+# and based on: https://colab.research.google.com/drive/14OvFnAXggxB8vM4e8vSURUp1TaKnovzX?usp=sharing#scrollTo=0YgHcLXMLk4o
 from sklearn.utils import compute_class_weight
 import torch
 from torch.nn import Linear
@@ -11,6 +13,7 @@ import random
 import argparse
 import pickle
 from pathlib import Path
+import datetime
 
 import torch
 import numpy as np
@@ -35,9 +38,9 @@ from imblearn.under_sampling import RandomUnderSampler
 
 # %%
 
-random.seed(0)
-np.random.seed(0)
-torch.manual_seed(0)
+#random.seed(0)
+#np.random.seed(0)
+#torch.manual_seed(0)
 
 ### Argument and global variables
 parser = argparse.ArgumentParser('MLP supervised training')
@@ -81,7 +84,7 @@ args = 0
 ### set up logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 fh = logging.FileHandler('log/{}.log'.format(str(time.time())))
 fh.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
@@ -106,26 +109,13 @@ max_date = all_df["date"].max()
 all_df.loc[all_df["date"] < max_date,"label"] = 1
 all_df.loc[all_df["date"] == max_date,"label"] = 0
 
-
 X = all_df[["age", "gender", "surgery qty", "is_icu"]]
 X = pd.DataFrame(MinMaxScaler().fit_transform(X.values), columns=X.columns, index=X.index).to_numpy()
 y = all_df[["label"]].values.astype(int)
-X = np.concatenate([X, X])
-y = np.concatenate([y,y])
-
-undersample = RandomUnderSampler(sampling_strategy=0.75)
-
-X, y = undersample.fit_resample(X, y)
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42, stratify=y)
-
-# oversample class 1 (but not too much)
-# difference = sum((y_train==0)*1) - sum((y_train==1)*1)
-# difference[0] = np.ceil(difference[0] / 2)
-# indices = np.where(y_train==1)[0]
-# rand_subsample = np.random.randint(0, len(indices), difference)
-# X_train, y_train = np.concatenate((X_train, X_train[indices[rand_subsample]])), np.concatenate((y_train, y_train[indices[rand_subsample]]))
-
+oversample_factor = 30
+undersample_factor = 0.75
+X = np.concatenate([X] * oversample_factor) # oversample minority class by factor 10
+y = np.concatenate([y] * oversample_factor)
 class NumpyArrayDataset(Dataset):
 
   def __init__(self, X, y):
@@ -147,18 +137,11 @@ class NumpyArrayDataset(Dataset):
 
 epochs = 1000+1
 print_epoch = 100
-lr = 1e-2
-batch_size = 64
+lr = 0.001
+batch_size = 128
 
 classes = np.unique(y).shape[0]
 
-
-train_data = NumpyArrayDataset(X_train, y_train)
-test_data = NumpyArrayDataset(X_test, y_test)
-
-
-train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, drop_last=True)
-test_loader = DataLoader(dataset=test_data, batch_size=batch_size, shuffle=True)
 
 # %%
 
@@ -188,111 +171,146 @@ print(model)
 # This time, we also define a **`test` function** to evaluate how well our final model performs on the test node set (which labels have not been observed during training).
 
 # %%
+runs = 1
+for i in range(runs):
 
-model = MLP(hidden_channels=16)
+  random.seed(i)
+  np.random.seed(i)
+  torch.manual_seed(i)
 
-criterion = torch.nn.CrossEntropyLoss()  # Define loss criterion
-accuracy = accuracy_score
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)  # Define optimizer
+  X = all_df[["age", "gender", "surgery qty", "is_icu"]]
+  X = pd.DataFrame(MinMaxScaler().fit_transform(X.values), columns=X.columns, index=X.index).to_numpy()
+  y = all_df[["label"]].values.astype(int)
 
-test_result = []
-test_probs = []
+  X = np.concatenate([X] * oversample_factor) # oversample minority class by factor 2
+  y = np.concatenate([y] * oversample_factor)
 
-for epoch in range(epochs):
-    
-    iteration_loss = 0.0
-    iteration_accuracy = 0.0
-    
-    model.train()
-    for i, (X, y) in enumerate(train_loader):
-      y_pred = model(X.float())
-      loss = criterion(y_pred, y.squeeze())     
+  # undersample majority class to fit minority class
+  undersample = RandomUnderSampler(sampling_strategy=undersample_factor, random_state=i)
+
+  X_new, y_new = undersample.fit_resample(X, y)
+
+  X_train, X_test, y_train, y_test = train_test_split(X_new, y_new, test_size=0.33, random_state=42, stratify=y_new)
+
+  train_data = NumpyArrayDataset(X_train, y_train)
+  test_data = NumpyArrayDataset(X_test, y_test)
+  train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, drop_last=True)
+  test_loader = DataLoader(dataset=test_data, batch_size=batch_size, shuffle=True)
+
+  model = MLP(hidden_channels=16)
+
+  criterion = torch.nn.CrossEntropyLoss()  # Define loss criterion
+  accuracy = accuracy_score
+  optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)  # Define optimizer
+
+  test_result = []
+  test_probs = []
+
+  for epoch in range(epochs):
       
-      iteration_loss = loss
-      iteration_accuracy = accuracy(torch.argmax(y_pred, dim=1).detach().cpu().numpy(), y.detach().cpu().numpy().astype(int))
-
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
+      iteration_loss = 0.0
+      iteration_accuracy = 0.0
+      
+      model.train()
+      for i, (X, y) in enumerate(train_loader):
+        y_pred = model(X.float())
+        loss = criterion(y_pred, y.squeeze())     
         
+        iteration_loss = loss
+        iteration_accuracy = accuracy(torch.argmax(y_pred, dim=1).detach().cpu().numpy(), y.detach().cpu().numpy().astype(int))
 
-    if(epoch % print_epoch == 0):
-        print('Train: epoch: {0} - loss: {1:.5f}; acc: {2:.3f}'.format(epoch, iteration_loss, iteration_accuracy))    
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+          
 
-    model.eval()
-    for i, (X, y) in enumerate(test_loader):
-      y_pred = model(X.float())
-      loss = criterion(y_pred, y.squeeze())
+      if(epoch % print_epoch == 0):
+          print('Train: epoch: {0} - loss: {1:.5f}; acc: {2:.3f}'.format(epoch, iteration_loss, iteration_accuracy))    
 
-      if(epoch == epochs-1):
-        test_result.append((y, torch.argmax(y_pred, dim=1)))
-        test_probs.append(y_pred)
+      model.eval()
+      for i, (X, y) in enumerate(test_loader):
+        y_pred = model(X.float())
+        loss = criterion(y_pred, y.squeeze())
 
-      iteration_loss = loss
-      iteration_accuracy = accuracy(torch.argmax(y_pred, dim=1).detach().cpu().numpy(), y.detach().cpu().numpy().astype(int))
+        if(epoch == epochs-1):
+          test_result.append((y, torch.argmax(y_pred, dim=1)))
+          test_probs.append(y_pred)
 
-    if(epoch % print_epoch == 0):
-        print('Test: epoch: {0} - loss: {1:.5f}; acc: {2:.3f}'.format(epoch, iteration_loss, iteration_accuracy))
+        iteration_loss = loss
+        iteration_accuracy = accuracy(torch.argmax(y_pred, dim=1).detach().cpu().numpy(), y.detach().cpu().numpy().astype(int))
+
+      if(epoch % print_epoch == 0):
+          print('Test: epoch: {0} - loss: {1:.5f}; acc: {2:.3f}'.format(epoch, iteration_loss, iteration_accuracy))
 
 
-# def test():
-#       model.eval()
-#       out = model(data.x)
-#       pred = out.argmax(dim=1)  # Use the class with highest probability.
-#       test_correct = pred[data.test_mask] == data.y[data.test_mask]  # Check against ground-truth labels.
-# #       test_acc = int(test_correct.sum()) / int(data.test_mask.sum())  # Derive ratio of correct predictions.
-# #       return test_acc
-# 
-# 
-# # %%
-# test_acc = test()
-# print(f'Test Accuracy: {test_acc:.4f}')
+  # def test():
+  #       model.eval()
+  #       out = model(data.x)
+  #       pred = out.argmax(dim=1)  # Use the class with highest probability.
+  #       test_correct = pred[data.test_mask] == data.y[data.test_mask]  # Check against ground-truth labels.
+  # #       test_acc = int(test_correct.sum()) / int(data.test_mask.sum())  # Derive ratio of correct predictions.
+  # #       return test_acc
+  # 
+  # 
+  # # %%
+  # test_acc = test()
+  # print(f'Test Accuracy: {test_acc:.4f}')
 
+  ## %%
+
+  true, pred = zip(*test_result)
+  true, pred = torch.cat(true), torch.cat(pred)
+
+  cm = confusion_matrix(true, pred, labels=[0,1])
+  disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+  disp.plot()
+
+  ## %%
+
+  print('class 0 accuracy: {0:.3f}'.format(cm[0,0]/sum(cm[0])))
+  print('class 1 accuracy: {0:.3f}'.format(cm[1,1]/sum(cm[1])))
+
+  ## %%
+
+  from sklearn.metrics import auc, average_precision_score, roc_auc_score, roc_curve
+  import matplotlib.pyplot as plt
+
+  lr_probs = torch.cat(test_probs)
+
+  lr_probs = lr_probs.detach().cpu().numpy()
+
+  lr_probs = lr_probs[:, 1]
+
+  # calculate auc of roc
+  auc_roc = roc_auc_score(true, lr_probs)
+
+  # calculate roc curve
+  fpr, tpr, _ = roc_curve(true, lr_probs)
+
+  # plot ROC curve
+  plt.figure()
+  lw = 2
+  plt.plot(
+  fpr,
+  tpr,
+  color="darkorange",
+  lw=lw,
+  label="ROC curve (area = %0.2f)" % auc_roc,
+  )
+  plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
+  plt.xlim([0.0, 1.0])
+  plt.ylim([0.0, 1.05])
+  plt.xlabel("False Positive Rate")
+  plt.ylabel("True Positive Rate")
+  plt.title("Receiver operating characteristic")
+  plt.legend(loc="lower right")
+  plt.show()
+
+  ## %%
+
+  roc_auc_data = [fpr, tpr, auc_roc]
+
+  with open(f"data/processed/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_mlp_roc_auc.pickle", 'wb') as fh:
+    pickle.dump(roc_auc_data, fh, pickle.HIGHEST_PROTOCOL)
+  
 # %%
-
-true, pred = zip(*test_result)
-true, pred = torch.cat(true), torch.cat(pred)
-
-cm = confusion_matrix(true, pred, labels=[0,1])
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
-disp.plot()
-
-# %%
-
-print('class 0 accuracy: {0:.3f}'.format(cm[0,0]/sum(cm[0])))
-print('class 1 accuracy: {0:.3f}'.format(cm[1,1]/sum(cm[1])))
-
-# %%
-
-from sklearn.metrics import auc, average_precision_score, roc_auc_score, roc_curve
-import matplotlib.pyplot as plt
-
-lr_probs = torch.cat(test_probs)
-
-lr_probs = lr_probs.detach().cpu().numpy()
-
-lr_probs = lr_probs[:, 1]
-
-# calculate auc of roc
-auc_roc = roc_auc_score(true, lr_probs)
-
-# calculate roc curve
-fpr, tpr, _ = roc_curve(true, lr_probs)
-
-# plot ROC curve
-plt.figure()
-lw = 2
-plt.plot(
-fpr,
-tpr,
-color="darkorange",
-lw=lw,
-label="ROC curve (area = %0.2f)" % auc_roc,
-)
-plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
-plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 1.05])
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.title("Receiver operating characteristic")
-plt.legend(loc="lower right")
